@@ -1,0 +1,8 @@
+# Runtime dependencies of the inference service. Compile with:
+#   uv pip compile requirements.in -o requirements.txt --python-version 3.11 --universal --index-strategy unsafe-best-match --emit-index-url
+--extra-index-url https://download.pytorch.org/whl/cpu
+fastapi>=0.115,<1
+uvicorn>=0.32,<1
+transformers>=4.50,<5
+torch>=2.6,<2.9
+prometheus-fastapi-instrumentator>=7,<8
