@@ -34,9 +34,36 @@ jobs:
       - name: Tests
         run: pytest
 
+  dag-check:
+    runs-on: ubuntu-latest
+    env:
+      AIRFLOW_VERSION: "2.10.5"
+      AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: >
+          pip install "apache-airflow==${AIRFLOW_VERSION}"
+          --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.11.txt"
+      - name: DAG imports and has the expected graph
+        run: |
+          python - <<'EOF'
+          from airflow.models import DagBag
+          bag = DagBag(include_examples=False)
+          assert not bag.import_errors, bag.import_errors
+          dag = bag.get_dag("sentiment_retraining")
+          graph = {t.task_id: sorted(t.downstream_task_ids) for t in dag.tasks}
+          print(graph)
+          assert graph["collect_data"] == ["evaluate_model", "trigger_retraining"]
+          assert graph["decide"] == ["no_retraining", "trigger_retraining"]
+          EOF
+
   # ---------- CD: build image, smoke-test it, publish it (only if CI passed) ----------
   build-publish:
-    needs: lint-test
+    needs: [lint-test, dag-check]
     runs-on: ubuntu-latest
     permissions:
       contents: read

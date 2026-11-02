@@ -42,7 +42,7 @@ groups:
         execErrState: Error
         labels: { severity: warning }
         annotations:
-          summary: "Negative predictions are {{ $$values.A.Value }} of traffic (baseline ~0.32)"
+          summary: "Negative predictions are {{ $$values.A.Value }} of traffic (baseline ~0.38)"
         data:
           - refId: A
             datasourceUid: prometheus
