@@ -61,6 +61,23 @@ jobs:
       - name: Container logs
         if: failure()
         run: docker logs api
+      - name: Smoke test monitoring stack (compose reuses the image built above)
+        run: |
+          docker rm -f api
+          docker compose up -d
+          timeout 120 sh -c 'until curl -sf localhost:8000/health; do sleep 2; done'
+          for t in "great job" "awful experience" "it is tuesday"; do
+            curl -sf -X POST localhost:8000/predict -H 'Content-Type: application/json' -d "{\"text\":\"$t\"}"
+          done
+          timeout 60 sh -c 'until curl -s "localhost:9090/api/v1/query?query=sentiment_predictions_total" | grep -q negative; do sleep 3; done'
+          timeout 60 sh -c 'until curl -sf -u admin:admin localhost:3000/api/health; do sleep 2; done'
+          rules=$(curl -sf -u admin:admin localhost:3000/api/v1/provisioning/alert-rules | jq length)
+          dash=$(curl -sf -u admin:admin localhost:3000/api/dashboards/uid/sentiment-api | jq '.dashboard.panels | length')
+          echo "alert rules: $rules, dashboard panels: $dash"
+          [ "$rules" -ge 1 ] && [ "$dash" -ge 1 ]
+      - name: Compose logs
+        if: failure()
+        run: docker compose logs
       - name: Push to GitHub Container Registry
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |

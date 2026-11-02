@@ -35,5 +35,12 @@ def test_predict_accepts_max_length_text(client):
     assert r.status_code == 200
 
 
+def test_metrics_exposed(client):
+    client.post("/predict", json={"text": "metrics please"})
+    body = client.get("/metrics").text
+    for name in ("sentiment_predictions_total", "sentiment_input_length_chars", "http_request_duration_seconds"):
+        assert name in body
+
+
 def test_preprocess_masks_users_and_links():
     assert preprocess("@acme see https://t.co/xyz") == "@user see http"

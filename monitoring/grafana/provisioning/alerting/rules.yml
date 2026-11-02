@@ -1,0 +1,61 @@
+# Thresholds are motivated in the delivery notebook (section "Monitoraggio").
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: sentiment-api
+    folder: Sentiment
+    interval: 1m
+    rules:
+      # Operational: p95 latency of /predict above 500 ms for 5 minutes.
+      - uid: predict-latency-p95
+        title: "/predict p95 latency > 500ms"
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 latency of /predict is {{ $$values.A.Value }}s (threshold 0.5s)"
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{handler="/predict"}[5m])))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.5] }
+
+      # Model/business: share of negative predictions above 50% over the last hour.
+      - uid: negative-share-high
+        title: "Negative share > 50% (1h)"
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning }
+        annotations:
+          summary: "Negative predictions are {{ $$values.A.Value }} of traffic (baseline ~0.32)"
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 3600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              expr: sum(increase(sentiment_predictions_total{label="negative"}[1h])) / sum(increase(sentiment_predictions_total[1h]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.5] }

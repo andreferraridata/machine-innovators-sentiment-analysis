@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
+from prometheus_client import Counter, Histogram
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field
 from transformers import pipeline
 
@@ -30,6 +32,16 @@ class PredictResponse(BaseModel):
     score: float = Field(ge=0, le=1)
 
 
+# Model-level metrics (request volume/latency/errors come from the Instrumentator below).
+# Together they are the drift signals: class mix, confidence and input length vs. a baseline.
+PREDICTIONS = Counter("sentiment_predictions_total", "Predictions by label", ["label"])
+CONFIDENCE = Histogram(
+    "sentiment_prediction_confidence", "Top-class score", buckets=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0)
+)
+TEXT_LENGTH = Histogram(
+    "sentiment_input_length_chars", "Input text length", buckets=(10, 25, 50, 100, 150, 200, 280, 500, 1000, 2000)
+)
+
 state: dict = {}
 
 
@@ -42,6 +54,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Sentiment API", version="1.0.0", lifespan=lifespan)
+Instrumentator().instrument(app).expose(app, include_in_schema=False)  # GET /metrics
 
 
 @app.get("/health")
@@ -56,4 +69,7 @@ def predict(req: PredictRequest):
     # The tokenizer config has no model_max_length: without an explicit cap a long
     # text would overflow RoBERTa's 512 position embeddings and crash.
     result = state["classifier"](preprocess(req.text), truncation=True, max_length=512)[0]
+    PREDICTIONS.labels(result["label"]).inc()
+    CONFIDENCE.observe(result["score"])
+    TEXT_LENGTH.observe(len(req.text))
     return PredictResponse(label=result["label"], score=result["score"])
