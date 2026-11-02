@@ -54,7 +54,7 @@ jobs:
           from airflow.models import DagBag
           bag = DagBag(include_examples=False)
           assert not bag.import_errors, bag.import_errors
-          dag = bag.get_dag("sentiment_retraining")
+          dag = bag.dags["sentiment_retraining"]  # get_dag() would query the metadata DB
           graph = {t.task_id: sorted(t.downstream_task_ids) for t in dag.tasks}
           print(graph)
           assert graph["collect_data"] == ["evaluate_model", "trigger_retraining"]
